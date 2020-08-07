@@ -3,7 +3,7 @@ var playState = false;
 var sendMessage;
 async function runAudio() {
 	if(!audioRunning) {
-		audioRun = true;
+		audioRunning = true;
 		const audioContext = new AudioContext();
 		await audioContext.resume();
 		await audioContext.audioWorklet.addModule('chip_worklet.js');

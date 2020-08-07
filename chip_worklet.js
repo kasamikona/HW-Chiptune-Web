@@ -38,13 +38,13 @@ generatorFunction = function(buffer0, buffer1, rate) {
 	}
 	else for(let i in buffer0) buffer0[i] = resample(rate);
 };
-const callableFunctions = {startplaysong:startplaysong};
 messageProcessorFunction = function(action, payload) {
 	if(action == "callfunc") {
 		let f = payload.f || payload;
 		let args = payload.args || [];
 		callableFunctions[f](...args);
 	} else if(action == "play") {
+		resetChip();
 		forcePop = 0.5;
 		startplaysong();
 	} else if(action == "stop") {
@@ -199,22 +199,27 @@ function makeChannel() {
 		inertia: 0,
 		slur: 0
 	}
-};
+}
 
-var _c = {
-	callbackwait: 0,
-	trackwait: 0,
-	trackpos: 0,
-	songpos: 0,
-	playsong: 0,
-	playtrack: 0,
-	osc: [makeOsc(), makeOsc(), makeOsc(), makeOsc()],
-	channel: [makeChannel(), makeChannel(), makeChannel(), makeChannel()],
-	noiseseed: 1, // Moved from sound routine
-	noiseDivideCounter: 0, // For sound mod
-	light: [0, 0],
-	lightPort: 0
-};
+var _c;
+
+function resetChip() {
+	_c = {
+		callbackwait: 0,
+		trackwait: 0,
+		trackpos: 0,
+		songpos: 0,
+		playsong: 0,
+		playtrack: 0,
+		osc: [makeOsc(), makeOsc(), makeOsc(), makeOsc()],
+		channel: [makeChannel(), makeChannel(), makeChannel(), makeChannel()],
+		noiseseed: 1, // Moved from sound routine
+		noiseDivideCounter: 0, // For sound mod
+		light: [0, 0],
+		lightPort: 0
+	};
+}
+resetChip();
 
 const freqtable = [
 	0x0085, 0x008d, 0x0096, 0x009f, 0x00a8, 0x00b2, 0x00bd, 0x00c8, 0x00d4,
