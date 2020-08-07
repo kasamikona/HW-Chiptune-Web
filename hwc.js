@@ -6,7 +6,8 @@ async function runAudio() {
 		audioRunning = true;
 		const audioContext = new AudioContext();
 		await audioContext.resume();
-		await audioContext.audioWorklet.addModule('chip_worklet.js');
+		let uncache = Math.floor(Date.now()/(5*60*1000)); // Cache for no more than 5 minutes
+		await audioContext.audioWorklet.addModule('chip_worklet.js?uncache='+uncache);
 		const chipNode = new AudioWorkletNode(audioContext, 'chip_worklet');
 		chipNode.connect(audioContext.destination);
 		chipNode.port.onmessage = (event) => {
