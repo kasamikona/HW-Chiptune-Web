@@ -1,0 +1,60 @@
+!Config
+master_audio: ./recording.wav
+begin_time: 0.0
+end_time:
+fps: 60
+trigger_ms: 60
+render_ms: 40
+trigger_subsampling: 1
+render_subsampling: 1
+render_subfps: 2
+amplification: 4.000000000000001
+trigger_stereo: !Flatten SumAvg
+render_stereo: !Flatten SumAvg
+trigger: !CorrelationTriggerConfig
+  edge_direction: 1
+  post_trigger:
+  post_radius: 3
+  sign_strength: 1.0
+  edge_strength: 2.0
+  slope_strength: 50.0
+  slope_width: 0.02999999999999999
+  buffer_falloff: 0.5
+  responsiveness: 0.10000000000000003
+  pitch_tracking:
+channels:
+- !ChannelConfig
+  wav_path: ./recording_ch0.wav
+- !ChannelConfig
+  wav_path: ./recording_ch1.wav
+- !ChannelConfig
+  wav_path: ./recording_ch2.wav
+- !ChannelConfig
+  wav_path: ./recording_ch3.wav
+layout: !LayoutConfig
+  orientation: h
+  ncols: 1
+  stereo_orientation: h
+render: !RendererConfig
+  width: 1920
+  height: 1080
+  line_width: 2.0
+  grid_line_width: 1.5
+  bg_color: '#000000'
+  init_line_color: '#ffffff'
+  grid_color: '#555555'
+  stereo_grid_opacity: 0.25
+  midline_color: '#333333'
+  v_midline: false
+  h_midline: true
+  label_font: !Font
+    family:
+    bold: false
+    italic: false
+    size: 20
+    toString:
+  label_position: !LabelPosition LeftTop
+  label_padding_ratio: 0.5
+  label_color_override:
+  antialiasing: true
+  res_divisor: 1.0

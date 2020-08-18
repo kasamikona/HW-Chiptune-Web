@@ -137,7 +137,8 @@ function displayLights(t) {
 }
 
 function setChannelSolo(ch=-1) {
-	for(let i = 0; i < 4; i++) sendMessage("setChannelMuted", {channel:i, muted:(i!=ch)});
+	let muteAny = (ch >= 0 && ch <= 3);
+	for(let i = 0; i < 4; i++) sendMessage("setChannelMuted", {channel:i, muted:(muteAny && i!=ch)});
 }
 
 function workletFunction() {
@@ -614,6 +615,7 @@ function workletFunction() {
 				_c.channel[ch].bend +
 				((_c.channel[ch].vdepth * sinetable[_c.channel[ch].vpos & 63]) >> 2) ) & 65535; // u16
 			_c.channel[ch].bend += _c.channel[ch].bendd;
+			_c.channel[ch].bend &= 65535; _c.channel[ch].bend -= _c.channel[ch].bend > 32767 ? 65536 : 0 // s16
 			vol = _c.osc[ch].volume + _c.channel[ch].volumed;
 			if(vol < 0) vol = 0;
 			if(vol > 255) vol = 255;
