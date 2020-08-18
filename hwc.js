@@ -24,7 +24,7 @@ async function runAudio() {
 			let payload = event.data.payload;
 			receivedMessage(action, payload);
 		};
-		sendMessage = (action, payload) => chipNode.port.postMessage({action:action, payload:payload});
+		sendMessage = (action, payload, transfer=[]) => chipNode.port.postMessage({action:action, payload:payload}, transfer);
 		sendMessage("setSpeedMod", 3); // 48kHz
 		sendMessage("setBitMod", true); // 16bit
 		sendMessage("load", musicData);
@@ -39,7 +39,35 @@ function receivedMessage(action, payload) {
 		if(payload&2) lights[1] = 1;
 	} else if(action == "speaker") {
 		if(speakerMovement < payload) speakerMovement = (payload > 1) ? 1 : payload;
+	} else if(action == "saveRecording") {
+		makeWav(payload.buffer, payload.length, payload.rate); 
 	}
+}
+function makeWav(buffer, length, rate) {
+	console.log("Writing wav file...");
+	let headerLength = 44;
+	let wav = new Uint8Array( 44 + length );
+	let view = new DataView( wav.buffer );
+	view.setUint32( 0, 1380533830, false ); // RIFF identifier 'RIFF'
+	view.setUint32( 4, 36 + length, true ); // file length minus RIFF identifier length and file description length
+	view.setUint32( 8, 1463899717, false ); // RIFF type 'WAVE'
+	view.setUint32( 12, 1718449184, false ); // format chunk identifier 'fmt '
+	view.setUint32( 16, 16, true ); // format chunk length
+	view.setUint16( 20, 1, true ); // sample format (raw)
+	view.setUint16( 22, 1, true ); // channel count
+	view.setUint32( 24, rate, true ); // sample rate
+	view.setUint32( 28, rate * 2 * 1, true ); // byte rate (sample rate * block align)
+	view.setUint16( 32, 2 * 1, true ); // block align (channel count * bytes per sample)
+	view.setUint16( 34, 16, true ); // bits per sample
+	view.setUint32( 36, 1684108385, false); // data chunk identifier 'data'
+	view.setUint32( 40, length, true ); // data chunk length
+	wav.set( new Uint8Array(buffer, 0, length), headerLength );
+	var blob = new Blob([wav.buffer], {type:"audio/wav"});
+	var blobUrl = URL.createObjectURL(blob);
+	var link = document.createElement("a");
+	link.href = blobUrl;
+	link.download = "recording.wav";
+	link.click();
 }
 var svgDoc;
 var animating = false;
@@ -108,6 +136,10 @@ function displayLights(t) {
 	requestAnimationFrame(displayLights);
 }
 
+function setChannelSolo(ch=-1) {
+	for(let i = 0; i < 4; i++) sendMessage("setChannelMuted", {channel:i, muted:(i!=ch)});
+}
+
 function workletFunction() {
 	// Boilerplate
 	var startFunction;
@@ -123,8 +155,8 @@ function workletFunction() {
 				let payload = event.data.payload;
 				if(messageProcessorFunction) messageProcessorFunction(action, payload);
 			};
-			messageSend = (action, payload) => {
-				this.port.postMessage({action:action, payload:payload});
+			messageSend = (action, payload, transfer=[]) => {
+				this.port.postMessage({action, payload}, transfer);
 			}
 		}
 		process(inputs, outputs, parameters) {
@@ -142,33 +174,75 @@ function workletFunction() {
 	registerProcessor("chip_worklet", ChipWorkletProcessor);
 
 	// Synth specific
+	var recordBuffer = null;
+	var recordBufferView = null;
+	var doRecordBytes = 0;
+	var recordHead = 0;
+	var playing = false;
+	var stateChanging = false;
 	generatorFunction = function(buffer0, buffer1, rate) {
-		if(!!buffer1) for(let i in buffer0) {
-			buffer0[i] = resample(rate);
-			buffer1[i] = buffer0[i];
+		let s;
+		let si;
+		for(let i in buffer0) {
+			s = resample(rate);
+			buffer0[i] = s;
+			if(buffer1 != null) buffer1[i] = s;
+			if(playing && recordBuffer && recordHead < doRecordBytes) {
+				si = s * 32767;
+				recordBufferView[recordHead++] = si;
+				recordBufferView[recordHead++] = si>>8;
+				if(recordHead >= doRecordBytes) {
+					messageSend("saveRecording", {buffer:recordBuffer, length:recordHead, rate:sampleRate}, [recordBuffer]);
+					recordBuffer = null;
+				}
+			}
 		}
-		else for(let i in buffer0) buffer0[i] = resample(rate);
 	};
 	messageProcessorFunction = function(action, payload) {
-		if(action == "callfunc") {
+		/*if(action == "callfunc") {
 			let f = payload.f || payload;
 			let args = payload.args || [];
 			callableFunctions[f](...args);
-		} else if(action == "play") {
+		} else*/
+		if(action == "play") {
+			if(playing || stateChanging) return;
+			stateChanging = true;
+			if(doRecordBytes) {
+				recordBuffer = new ArrayBuffer(doRecordBytes);
+				recordBufferView = new Uint8Array(recordBuffer);
+				recordHead = 0;
+			}
 			resetChip();
 			forcePop = 0.5;
 			startplaysong();
+			playing = true;
+			stateChanging = false;
 		} else if(action == "stop") {
+			if(!playing || stateChanging) return;
+			stateChanging = true;
+			playing = false;
 			forcePop = -0.3;
 			silence();
+			if(doRecordBytes && recordBuffer) { // early finish!
+				messageSend("saveRecording", {buffer:recordBuffer, length:recordHead, rate:sampleRate}, [recordBuffer])
+				recordBuffer = null;
+			}
+			stateChanging = false;
 		} else if(action == "load") {
+			playing = false;
 			loadSong(payload);
-		} else if(action == "setSpeedMod") {
-			if(typeof(payload) == "number")
-				setSpeedMod(payload);
-		} else if(action == "setBitMod") {
-			if(typeof(payload) == "boolean")
-				setBitMod(payload);
+		} else if(action == "setSpeedMod" && typeof(payload) == "number") {
+			setSpeedMod(payload);
+		} else if(action == "setBitMod" && typeof(payload) == "boolean") {
+			setBitMod(payload);
+		} else if(action == "setRecordTime" && typeof(payload) == "number") {
+			doRecordBytes = Math.ceil(Math.max(0, payload) * sampleRate) * 2;
+		} else if(action == "setChannelMuted" && typeof(payload) == "object") {
+			if(typeof(payload.channel) == "number"
+			&& payload.channel >= 0 && payload.channel < 4
+			&& typeof(payload.muted) == "boolean") {
+				channelMutes[payload.channel] = payload.muted;
+			}
 		}
 		else console.log("Audio worklet ignoring message "+action);
 	};
@@ -193,6 +267,7 @@ function workletFunction() {
 	var lastLastSample = 0;
 	var sendSample = 0;
 	var forcePop = 0;
+	var channelMutes = [false, false, false, false];
 	function setSpeedMod(mult) {
 		if(mult < 1) mult = 1;
 		SPEEDMOD = mult;
@@ -588,7 +663,6 @@ function workletFunction() {
 		}
 		acc = 0;
 		for(i = 0; i < 4; i++) {
-			//if(i != 2) continue;
 			let value; // [-32,31]
 			switch(_c.osc[i].waveform) {
 				case WF_TRI:
@@ -613,6 +687,7 @@ function workletFunction() {
 			}
 			_c.osc[i].phase += (_c.osc[i].freq / SPEEDMOD); _c.osc[i].phase %= 65536; // u16
 
+			if(!channelMutes[i])
 			acc += value * _c.osc[i].volume; // rhs = [-8160,7905]
 		}
 		// acc [-32640,31620]
